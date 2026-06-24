@@ -17,7 +17,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>
 #
-# $Id: repo-list 47 2021-05-16 16:27:51Z rhubarb-geek-nz $
+# $Id: repo-list 48 2021-05-16 17:29:41Z rhubarb-geek-nz $
 #
 
 TARFILE="$1"
@@ -83,6 +83,7 @@ fi
 				SUM=
 				REPO=
 				ABI=
+				ARCH=
 				;;
 			version: )
 				if test -z "$VERS"
