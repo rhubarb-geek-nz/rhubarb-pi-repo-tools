@@ -1,0 +1,126 @@
+#!/bin/sh -e
+#
+#  Copyright 2021, Roger Brown
+#
+#  This file is part of rhubarb pi.
+#
+#  This program is free software: you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by the
+#  Free Software Foundation, either version 3 of the License, or (at your
+#  option) any later version.
+# 
+#  This program is distributed in the hope that it will be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+#  more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>
+#
+# $Id: repo-list 47 2021-05-16 16:27:51Z rhubarb-geek-nz $
+#
+
+TARFILE="$1"
+CURL=
+
+if test -z "$TARFILE"
+then
+	TARFILE=-
+else
+	case "$TARFILE" in
+		http:* | https:* | ftp:* | sftp:* )
+			CURL="$TARFILE"
+			TARFILE=-
+			;;
+		* )
+			;;
+	esac
+fi
+
+(
+	if test -z "$CURL"
+	then
+		if test "$TARFILE" = "-"
+		then
+			cat
+		fi
+	else
+		curl --no-progress-meter "$CURL"
+	fi
+) | tar xfOJ "$TARFILE" packagesite.yaml | (
+	echo "["
+	tr -s '\n' ','
+	echo "REMOVEME]"
+) | sed "s/,REMOVEME//" | json-yaml | (
+	NAME=
+	REPO=
+	SUM=
+	VERS=
+	ABI=
+	ARCH=
+
+	while read A B C D
+	do
+		case "$A" in
+			- )
+				A="$B"
+				B="$C"
+				C="$D"
+				D=
+				;;
+			* )
+				;;
+		esac
+
+		case "$A" in
+			name: )
+				if test -n "$NAME"
+				then
+					echo "$SUM" "$REPO" "$NAME" "$VERS" "$ABI" "$ARCH"
+				fi
+				NAME="$B"
+				VERS=
+				SUM=
+				REPO=
+				ABI=
+				;;
+			version: )
+				if test -z "$VERS"
+				then
+					VERS="$B"
+				fi
+				;;
+			sum: )
+				if test -z "$SUM"
+				then
+					SUM="$B"
+				fi
+				;;
+			abi: )
+				if test -z "$ABI"
+				then
+					ABI="$B"
+				fi
+				;;
+			arch: )
+				if test -z "$ARCH"
+				then
+					ARCH="$B"
+				fi
+				;;
+			repopath: )
+				if test -z "$REPO"
+				then
+					REPO="$B"
+				fi
+				;;
+			* )
+				;;
+		esac
+	done
+
+	if test -n "$NAME"
+	then
+		echo "$SUM" "$REPO" "$NAME" "$VERS" "$ABI" "$ARCH"
+	fi
+)

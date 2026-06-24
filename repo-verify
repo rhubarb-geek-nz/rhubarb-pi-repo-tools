@@ -1,0 +1,145 @@
+#!/bin/sh -e
+#
+#  Copyright 2021, Roger Brown
+#
+#  This file is part of rhubarb pi.
+#
+#  This program is free software: you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by the
+#  Free Software Foundation, either version 3 of the License, or (at your
+#  option) any later version.
+# 
+#  This program is distributed in the hope that it will be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+#  more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>
+#
+# $Id: repo-verify 47 2021-05-16 16:27:51Z rhubarb-geek-nz $
+#
+
+TASK=
+TARFILE=
+NAME=
+LASTARG=
+KEYFILE=
+
+for d in "$@"
+do
+	if test -z "$TASK"
+	then
+		TASK="$d"
+	else
+		if test -z "$LASTARG"
+		then
+			LASTARG="$d"
+		else
+			case "$LASTARG" in
+				-name )
+					NAME="$d"
+					;;
+				-file )
+					TARFILE="$d"
+					;;
+				-key )
+					KEYFILE="$d"
+					;;
+				* )
+					echo unknown arg "$d" 1>&2
+					false
+			esac
+
+			LASTARG=
+		fi
+	fi
+done
+
+TMPDIR=/tmp/$LOGNAME.$$.repo
+
+mkdir "$TMPDIR"
+
+trap "rm -rf $TMPDIR" 0
+
+if test -n "$TARFILE"
+then
+	tar xfZ "$TARFILE" -C "$TMPDIR"
+fi
+
+case "$TASK" in
+	verify )
+		if test -z "$NAME"
+		then
+			echo arg -name is missing 1>&2
+			false
+		fi
+
+		if test ! -f "$TMPDIR/$NAME"
+		then
+			echo file "$NAME" not found in archive 1>&2
+			false
+		fi
+
+		if test -r "$TMPDIR/signature"
+		then
+			SIGFILE="$TMPDIR/signature"
+
+			LEN=$(stat -f "%z" "$SIGFILE")
+			REM=$(echo $LEN % 32 | bc)
+
+			if test "$REM" -gt 0
+			then
+				dd if="$TMPDIR/signature" of="$TMPDIR/signature.trunk" bs=$(echo $LEN-$REM | bc) count=1 2>/dev/null
+				SIGFILE="$TMPDIR/signature.trunk"
+			fi
+
+			openssl rsautl -pubin -verify -inkey "$KEYFILE" -in "$SIGFILE" -out "$SIGFILE.DER"
+
+			CHKSUM=$(sha256 -q "$TMPDIR/$NAME")
+			CHKSUM=$(echo -n "$CHKSUM" | od -A n -t x1 | tr -d [:space:] | tr -d '\n' )
+			CHKSUM="$CHKSUM"00
+
+			if openssl asn1parse -inform DER -in "$SIGFILE.DER" | grep ":$CHKSUM" > /dev/null
+			then
+				echo "Verified OK"
+				true
+			else
+				echo "Verification Failure"
+				false
+			fi
+		else
+			for d in ".sig" ".pub"
+			do
+				if test ! -f "$TMPDIR/$NAME$d"
+				then
+					echo file "$NAME$d" not found in archive 1>&2
+					false
+				fi
+			done
+
+			if test -n "$KEYFILE"
+			then
+				diff "$KEYFILE" "$TMPDIR/$NAME.pub"
+			fi
+
+			echo -n $(sha256 -q "$TMPDIR/$NAME") | openssl dgst -verify "$TMPDIR/$NAME.pub" -signature "$TMPDIR/$NAME.sig"
+		fi
+		;;
+	fingerprint )
+		if test -n "$KEYFILE"
+		then
+			sha256 -q "$KEYFILE"			
+		else
+			(
+				set -e
+				cd "$TMPDIR"
+				sha256 -q *.pub
+			)
+		fi
+		;;
+	* )
+		echo unknown task $TASK 1>&2
+		false
+		;;
+esac
