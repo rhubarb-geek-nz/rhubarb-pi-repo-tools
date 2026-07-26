@@ -20,16 +20,7 @@
 # $Id: package.sh 47 2021-05-16 16:27:51Z rhubarb-geek-nz $
 #
 
-SVNVERS=-2
-
-for d in $0 repo-*
-do
-	svn log -q $d > /dev/null
-	COUNT=$(svn log -q $d | grep -v "\------" | wc -l)
-
-	SVNVERS=$(echo $SVNVERS+$COUNT | bc)
-done
-
+SVNVERS=$(git log --oneline | wc -l | bc)
 VERSION=1.0.$SVNVERS
 PKGNAME=rhubarb-pi-repo-tools
 OUTDIR_DIST=$(pwd)
@@ -92,6 +83,6 @@ EOF
 
 if pkg create -M MANIFEST -o "$OUTDIR_DIST" -r root -v -p PLIST
 then
-	pkg info -F "$OUTDIR_DIST/$PKGNAME-$VERSION.txz"
-	pkg info -l -d -F "$OUTDIR_DIST/$PKGNAME-$VERSION.txz"
+	pkg info -F "$OUTDIR_DIST/$PKGNAME-$VERSION.pkg"
+	pkg info -l -d -F "$OUTDIR_DIST/$PKGNAME-$VERSION.pkg"
 fi
